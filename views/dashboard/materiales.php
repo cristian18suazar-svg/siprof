@@ -16,8 +16,8 @@ $materialModel = new Material($db);
 $materiales = $materialModel->obtenerTodos();
 
 $totalMateriales  = count($materiales);
-$valorInventario  = array_sum(array_map(fn($m) => $m['Cantidad'] * $m['Precio'], $materiales));
-$stockCritico     = count(array_filter($materiales, fn($m) => $m['Cantidad'] <= $m['StockMinimo']));
+$valorInventario  = array_sum(array_map(function($m) { return $m['Cantidad'] * $m['Precio']; }, $materiales));
+$stockCritico     = count(array_filter($materiales, function($m) { return $m['Cantidad'] <= $m['StockMinimo']; }));
 $stockOk          = $totalMateriales - $stockCritico;
 
 // Imagen representativa según tipo de material

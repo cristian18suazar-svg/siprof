@@ -63,15 +63,17 @@ class Cultivo {
     }
 
     public function eliminar($id) {
-        try {
-            $sql = "DELETE FROM " . $this->tabla . " WHERE IDcultivo = :id";
-            $stmt = $this->conn->prepare($sql);
-            $stmt->bindParam(":id", $id);
-            return $stmt->execute();
-        } catch (Exception $e) {
-            error_log("Error al eliminar cultivo: " . $e->getMessage());
-            return false;
-        }
+        // La eliminación en cascada se maneja desde el controlador
+        $sql = "DELETE FROM " . $this->tabla . " WHERE IDcultivo = :id";
+        $stmt = $this->conn->prepare($sql);
+        $stmt->bindParam(":id", $id);
+        return $stmt->execute();
+    }
+
+    public function eliminarDependencias($idCultivo) {
+        $this->conn->prepare("DELETE FROM controldecultivo WHERE IDcultivo = :id")->execute(array(':id' => $idCultivo));
+        $this->conn->prepare("DELETE FROM seguimiento WHERE IDcultivo = :id")->execute(array(':id' => $idCultivo));
+        $this->conn->prepare("DELETE FROM produccion WHERE IDcultivo = :id")->execute(array(':id' => $idCultivo));
     }
 }
 ?>

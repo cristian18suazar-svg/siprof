@@ -79,17 +79,31 @@ switch ($accion) {
     case 'eliminar':
         $id = intval($_POST['id'] ?? 0);
         if ($id > 0) {
-            if ($cultivoModel->eliminar($id)) {
-                $_SESSION['alert'] = [
-                    'icon'  => 'success',
-                    'title' => 'Cultivo eliminado',
-                    'text'  => 'El cultivo ha sido eliminado exitosamente'
-                ];
-            } else {
+            try {
+                $db->beginTransaction();
+                $cultivoModel->eliminarDependencias($id);
+                $ok = $cultivoModel->eliminar($id);
+                if ($ok) {
+                    $db->commit();
+                    $_SESSION['alert'] = [
+                        'icon'  => 'success',
+                        'title' => 'Cultivo eliminado',
+                        'text'  => 'El cultivo y sus registros asociados fueron eliminados.'
+                    ];
+                } else {
+                    $db->rollBack();
+                    $_SESSION['alert'] = [
+                        'icon'  => 'error',
+                        'title' => 'Error al eliminar',
+                        'text'  => 'No se pudo eliminar el cultivo.'
+                    ];
+                }
+            } catch (Exception $e) {
+                $db->rollBack();
                 $_SESSION['alert'] = [
                     'icon'  => 'error',
-                    'title' => 'Error al eliminar',
-                    'text'  => 'No se pudo eliminar el cultivo'
+                    'title' => 'Error del sistema',
+                    'text'  => 'Ocurrió un error inesperado al eliminar el cultivo.'
                 ];
             }
         }

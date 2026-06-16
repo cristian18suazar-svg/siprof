@@ -53,16 +53,19 @@ class Lote {
         }
     }
 
+    public function obtenerCultivosPorLote(int $idLote): array {
+        $stmt = $this->conn->prepare("SELECT IDcultivo FROM cultivo WHERE IDlote = :id");
+        $stmt->bindParam(':id', $idLote);
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    }
+
     public function eliminar($id) {
-        try {
-            $sql = "DELETE FROM " . $this->tabla . " WHERE IDlote = :id";
-            $stmt = $this->conn->prepare($sql);
-            $stmt->bindParam(":id", $id);
-            return $stmt->execute();
-        } catch (Exception $e) {
-            error_log("Error al eliminar lote: " . $e->getMessage());
-            return false;
-        }
+        // La eliminación en cascada se maneja desde el controlador
+        $sql = "DELETE FROM " . $this->tabla . " WHERE IDlote = :id";
+        $stmt = $this->conn->prepare($sql);
+        $stmt->bindParam(":id", $id);
+        return $stmt->execute();
     }
 
     public function toggleEstado($id, $estado) {

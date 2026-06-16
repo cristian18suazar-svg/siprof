@@ -1,537 +1,386 @@
 <?php
 session_start();
+if (!isset($_SESSION['usuario'])) { header("Location: ../usuarios/login.php"); exit; }
 
-if (!isset($_SESSION['usuario'])) {
-    header("Location: ../../login.php");
-    exit;
+$titulo = "Inventario - SIPROF";
+require_once __DIR__ . '/../layouts/header.php';
+require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../models/Material.php';
+
+$db  = getConnection();
+$mat = new Material($db);
+$materiales = $mat->obtenerTodos();
+
+// Movimientos recientes
+$movimientos = [];
+try {
+    $stmt = $db->query("SELECT m.*, mt.Nombre AS MaterialNombre, u.Nombre AS UsuarioNombre
+                        FROM movimientoinventario m
+                        LEFT JOIN materiales mt ON m.IDmateriales = mt.IDmateriales
+                        LEFT JOIN usuario u ON m.IDusuario = u.IDusuario
+                        ORDER BY m.Fecha DESC LIMIT 50");
+    $movimientos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) { $movimientos = []; }
+
+// Métricas
+$totalItems   = count($materiales);
+$stockCritico = count(array_filter($materiales, fn($m) => $m['Cantidad'] <= $m['StockMinimo']));
+$valorTotal   = array_sum(array_map(fn($m) => $m['Cantidad'] * $m['Precio'], $materiales));
+$totalMovs    = count($movimientos);
+
+// Filtro de búsqueda GET
+$busqueda = trim($_GET['q'] ?? '');
+$filtroTipo = trim($_GET['tipo'] ?? '');
+if ($busqueda || $filtroTipo) {
+    $materiales = array_filter($materiales, function($m) use ($busqueda, $filtroTipo) {
+        $matchBusq = !$busqueda || stripos($m['Nombre'], $busqueda) !== false
+                                || stripos($m['Tipo'], $busqueda) !== false;
+        $matchTipo = !$filtroTipo || strtolower($m['Tipo']) === strtolower($filtroTipo);
+        return $matchBusq && $matchTipo;
+    });
 }
 
-$titulo = "Gestión de Inventario - SIPROF";
-require_once __DIR__ . '/../layouts/header.php';
+// Tipos únicos para el filtro
+$tipos = array_unique(array_column($mat->obtenerTodos(), 'Tipo'));
+sort($tipos);
 ?>
 
-<!-- Header de Inventario -->
-<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+<style>
+    .font-outfit { font-family: 'Outfit', sans-serif; }
+    .animate-fade-in { animation: fadeIn 0.5s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .tab-btn.active { border-bottom: 3px solid #16a34a; color: #16a34a; font-weight: 700; }
+</style>
+
+<div class="font-outfit space-y-8 animate-fade-in p-2 md:p-4">
+
+<!-- HEADER -->
+<div class="bg-gradient-to-r from-emerald-800 to-emerald-600 rounded-[2rem] shadow-xl p-8 md:p-10 text-white relative overflow-hidden">
+    <div class="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full mix-blend-overlay filter blur-3xl transform translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
+    <div class="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div>
-            <h2 class="text-2xl font-bold text-gray-800">Gestión de Inventario</h2>
-            <p class="text-gray-600 mt-1">Control de insumos, herramientas y equipos</p>
+            <p class="text-emerald-300 text-sm font-semibold uppercase tracking-widest mb-2">Administración</p>
+            <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight mb-3">
+                Control de <span class="text-emerald-300">Inventario</span>
+            </h2>
+            <p class="text-emerald-100/80 text-lg font-light">Materiales, movimientos y stock de la finca.</p>
         </div>
-        <div class="flex gap-3 mt-4 md:mt-0">
-            <button onclick="openModal('modalFiltrosInventario')" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors">
-                <i class="fas fa-filter mr-2"></i>Filtros
-            </button>
-            <button onclick="openModal('modalInventario')" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors">
-                <i class="fas fa-plus mr-2"></i>Agregar Item
-            </button>
-        </div>
+        <button onclick="openModal('modalMovimiento')"
+            class="group bg-white hover:bg-emerald-50 text-emerald-900 font-bold px-8 py-4 rounded-2xl shadow-lg transition-all hover:scale-105 flex items-center gap-3 whitespace-nowrap">
+            <i class="fas fa-plus-circle text-emerald-600 group-hover:rotate-90 transition-transform duration-300 text-lg"></i>
+            Registrar Movimiento
+        </button>
     </div>
 </div>
 
-<!-- Estadísticas de Inventario -->
-<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-    <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="text-sm text-gray-600">Total Items</p>
-                <p class="text-2xl font-bold text-gray-800">342</p>
+<!-- STATS -->
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+    <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center justify-between mb-3">
+            <div class="w-11 h-11 bg-emerald-50 rounded-xl flex items-center justify-center">
+                <i class="fas fa-boxes-stacked text-emerald-600 text-lg"></i>
             </div>
-            <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <i class="fas fa-boxes text-blue-600"></i>
-            </div>
+            <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg uppercase">Total</span>
         </div>
+        <p class="text-3xl font-extrabold text-gray-900"><?= $totalItems ?></p>
+        <p class="text-xs text-gray-500 font-medium mt-1">Materiales registrados</p>
     </div>
-    
-    <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="text-sm text-gray-600">Stock Bajo</p>
-                <p class="text-2xl font-bold text-red-600">18</p>
+    <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center justify-between mb-3">
+            <div class="w-11 h-11 bg-red-50 rounded-xl flex items-center justify-center">
+                <i class="fas fa-triangle-exclamation text-red-500 text-lg"></i>
             </div>
-            <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                <i class="fas fa-exclamation-triangle text-red-600"></i>
-            </div>
+            <span class="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded-lg uppercase">Crítico</span>
         </div>
+        <p class="text-3xl font-extrabold <?= $stockCritico > 0 ? 'text-red-600' : 'text-gray-900' ?>"><?= $stockCritico ?></p>
+        <p class="text-xs text-gray-500 font-medium mt-1">Stock bajo mínimo</p>
     </div>
-    
-    <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="text-sm text-gray-600">Valor Total</p>
-                <p class="text-2xl font-bold text-gray-800">$458K</p>
+    <div class="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center justify-between mb-3">
+            <div class="w-11 h-11 bg-blue-50 rounded-xl flex items-center justify-center">
+                <i class="fas fa-clock-rotate-left text-blue-600 text-lg"></i>
             </div>
-            <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <i class="fas fa-dollar-sign text-green-600"></i>
-            </div>
+            <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg uppercase">Movs.</span>
         </div>
+        <p class="text-3xl font-extrabold text-gray-900"><?= $totalMovs ?></p>
+        <p class="text-xs text-gray-500 font-medium mt-1">Movimientos recientes</p>
     </div>
-    
-    <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="text-sm text-gray-600">En Tránsito</p>
-                <p class="text-2xl font-bold text-yellow-600">12</p>
+    <div class="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-2xl p-5 shadow-sm text-white">
+        <div class="flex items-center justify-between mb-3">
+            <div class="w-11 h-11 bg-white/20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-wallet text-white text-lg"></i>
             </div>
-            <div class="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
-                <i class="fas fa-truck text-yellow-600"></i>
-            </div>
+            <span class="text-[10px] font-bold text-emerald-200 bg-white/10 px-2 py-1 rounded-lg uppercase">Valor</span>
         </div>
+        <p class="text-2xl font-extrabold">$ <?= number_format($valorTotal, 0, ',', '.') ?></p>
+        <p class="text-xs text-emerald-200 font-medium mt-1">Valor total en stock</p>
     </div>
 </div>
 
-<!-- Tabs para categorías -->
-<div class="bg-white rounded-xl shadow-sm border border-gray-200">
-    <div class="border-b border-gray-200">
-        <nav class="flex -mb-px">
-            <button onclick="switchTabInventario('todos')" id="tab-todos" class="px-6 py-3 border-b-2 border-green-500 text-green-600 font-medium text-sm">
-                Todos (342)
+<!-- TABS -->
+<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div class="border-b border-gray-100 flex items-center justify-between px-6 pt-4 gap-4 flex-wrap">
+        <div class="flex gap-1" id="tabsInventario">
+            <button onclick="cambiarTab('materiales')" class="tab-btn active px-4 py-3 text-sm font-medium text-gray-500 hover:text-emerald-600 transition-colors" data-tab="materiales">
+                <i class="fas fa-boxes-stacked mr-1"></i> Materiales
             </button>
-            <button onclick="switchTabInventario('insumos')" id="tab-insumos" class="px-6 py-3 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium text-sm">
-                Insumos (156)
+            <button onclick="cambiarTab('movimientos')" class="tab-btn px-4 py-3 text-sm font-medium text-gray-500 hover:text-emerald-600 transition-colors" data-tab="movimientos">
+                <i class="fas fa-clock-rotate-left mr-1"></i> Movimientos
             </button>
-            <button onclick="switchTabInventario('herramientas')" id="tab-herramientas" class="px-6 py-3 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium text-sm">
-                Herramientas (89)
+        </div>
+        <!-- Buscador + filtro tipo -->
+        <form method="GET" class="flex items-center gap-2 pb-3" id="formFiltro">
+            <input type="hidden" name="tab" id="tabHidden" value="materiales">
+            <div class="relative">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                <input type="search" name="q" value="<?= htmlspecialchars($busqueda) ?>"
+                       placeholder="Buscar material..."
+                       class="pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 w-52">
+            </div>
+            <select name="tipo" class="px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+                <option value="">Todos los tipos</option>
+                <?php foreach ($tipos as $t): ?>
+                    <option value="<?= htmlspecialchars($t) ?>" <?= $filtroTipo === $t ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($t) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <button type="submit" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold transition-colors">
+                Filtrar
             </button>
-            <button onclick="switchTabInventario('equipos')" id="tab-equipos" class="px-6 py-3 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium text-sm">
-                Equipos (67)
-            </button>
-            <button onclick="switchTabInventario('semillas')" id="tab-semillas" class="px-6 py-3 border-b-2 border-transparent text-gray-500 hover:text-gray-700 font-medium text-sm">
-                Semillas (30)
-            </button>
-        </nav>
+            <?php if ($busqueda || $filtroTipo): ?>
+            <a href="inventario.php" class="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl text-sm font-bold transition-colors">
+                Limpiar
+            </a>
+            <?php endif; ?>
+        </form>
     </div>
-    
-    <!-- Tabla de Inventario -->
-    <div class="overflow-x-auto">
-        <table class="w-full">
-            <thead class="bg-gray-50 border-b border-gray-200">
-                <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unidad</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Unit.</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+
+    <!-- TAB: MATERIALES -->
+    <div id="tab-materiales" class="overflow-x-auto">
+        <table class="w-full text-left min-w-[900px]">
+            <thead>
+                <tr class="bg-gray-50 border-b border-gray-100">
+                    <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Material</th>
+                    <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Tipo</th>
+                    <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Stock</th>
+                    <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Precio Unit.</th>
+                    <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Valor Total</th>
+                    <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Estado</th>
+                    <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest text-center">Acciones</th>
                 </tr>
             </thead>
-            <tbody class="bg-white divide-y divide-gray-200" id="inventario-table-body">
-                <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">INS001</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="flex items-center">
-                            <div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
-                                <i class="fas fa-flask text-green-600 text-sm"></i>
+            <tbody class="divide-y divide-gray-50">
+                <?php if (empty($materiales)): ?>
+                <tr><td colspan="7" class="px-6 py-12 text-center text-gray-400 font-medium">
+                    <i class="fas fa-boxes-stacked text-3xl mb-3 block opacity-30"></i>
+                    <?= $busqueda || $filtroTipo ? 'Sin resultados para los filtros aplicados.' : 'No hay materiales registrados.' ?>
+                </td></tr>
+                <?php else: ?>
+                <?php foreach ($materiales as $m):
+                    $critico = $m['Cantidad'] <= $m['StockMinimo'];
+                    $pct = $m['StockMinimo'] > 0 ? min(100, round(($m['Cantidad'] / ($m['StockMinimo'] * 2)) * 100)) : 100;
+                    $barColor = $critico ? 'bg-red-500' : ($pct < 60 ? 'bg-yellow-400' : 'bg-emerald-500');
+                    $valorMat = $m['Cantidad'] * $m['Precio'];
+                ?>
+                <tr class="hover:bg-gray-50/50 transition-colors">
+                    <td class="px-6 py-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 flex-shrink-0">
+                                <i class="fas fa-box text-sm"></i>
                             </div>
                             <div>
-                                <div class="text-sm font-medium text-gray-900">Fertilizante NPK 15-15-15</div>
-                                <div class="text-sm text-gray-500">Fertilizante completo</div>
+                                <p class="font-bold text-gray-900"><?= htmlspecialchars($m['Nombre']) ?></p>
+                                <?php if (!empty($m['Descripcion'])): ?>
+                                    <p class="text-xs text-gray-400 truncate max-w-xs"><?= htmlspecialchars($m['Descripcion']) ?></p>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Insumos</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="flex items-center">
-                            <span class="text-sm font-medium text-gray-900">850</span>
-                            <span class="text-sm text-gray-500 ml-1">kg</span>
+                    <td class="px-6 py-4">
+                        <span class="px-3 py-1 rounded-xl text-xs font-bold bg-gray-100 text-gray-700"><?= htmlspecialchars($m['Tipo']) ?></span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="flex flex-col gap-1 min-w-[120px]">
+                            <span class="text-sm font-bold <?= $critico ? 'text-red-600' : 'text-gray-800' ?>">
+                                <?= $m['Cantidad'] ?> / <?= $m['StockMinimo'] ?> <?= htmlspecialchars($m['Unidad']) ?>
+                            </span>
+                            <div class="w-full bg-gray-100 rounded-full h-1.5">
+                                <div class="<?= $barColor ?> h-1.5 rounded-full" style="width:<?= $pct ?>%"></div>
+                            </div>
                         </div>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">kg</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$2.50</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">$2,125</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                            Normal
-                        </span>
+                    <td class="px-6 py-4 font-bold text-gray-900">$ <?= number_format($m['Precio'], 0, ',', '.') ?></td>
+                    <td class="px-6 py-4 font-bold text-emerald-700">$ <?= number_format($valorMat, 0, ',', '.') ?></td>
+                    <td class="px-6 py-4">
+                        <?php if ($critico): ?>
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-red-50 text-red-700 ring-1 ring-red-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span> Crítico
+                            </span>
+                        <?php else: ?>
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Normal
+                            </span>
+                        <?php endif; ?>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button onclick="verDetallesInventario('INS001')" class="text-green-600 hover:text-green-900 mr-2">Ver</button>
-                        <button onclick="editarInventario('INS001')" class="text-blue-600 hover:text-blue-900 mr-2">Editar</button>
-                        <button onclick="ajustarStock('INS001')" class="text-yellow-600 hover:text-yellow-900">Ajustar</button>
+                    <td class="px-6 py-4 text-center">
+                        <button onclick="registrarMovimiento(<?= $m['IDmateriales'] ?>, '<?= htmlspecialchars($m['Nombre'], ENT_QUOTES) ?>', <?= $m['Cantidad'] ?>)"
+                            class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white text-xs font-bold transition-all">
+                            <i class="fas fa-arrows-up-down text-xs"></i> Movimiento
+                        </button>
                     </td>
                 </tr>
-                
-                <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">SEM001</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="flex items-center">
-                            <div class="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center mr-3">
-                                <i class="fas fa-seedling text-yellow-600 text-sm"></i>
-                            </div>
-                            <div>
-                                <div class="text-sm font-medium text-gray-900">Semillas de Maíz Híbrido</div>
-                                <div class="text-sm text-gray-500">Variedad premium</div>
-                            </div>
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Semillas</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="flex items-center">
-                            <span class="text-sm font-medium text-red-600">45</span>
-                            <span class="text-sm text-gray-500 ml-1">kg</span>
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">kg</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$8.50</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">$382.50</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                            Stock Bajo
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button onclick="verDetallesInventario('SEM001')" class="text-green-600 hover:text-green-900 mr-2">Ver</button>
-                        <button onclick="editarInventario('SEM001')" class="text-blue-600 hover:text-blue-900 mr-2">Editar</button>
-                        <button onclick="reordenar('SEM001')" class="text-orange-600 hover:text-orange-900">Reordenar</button>
-                    </td>
-                </tr>
-                
-                <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">HERR001</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="flex items-center">
-                            <div class="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center mr-3">
-                                <i class="fas fa-hammer text-gray-600 text-sm"></i>
-                            </div>
-                            <div>
-                                <div class="text-sm font-medium text-gray-900">Machetes Agrícolas</div>
-                                <div class="text-sm text-gray-500">Acero de alta calidad</div>
-                            </div>
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Herramientas</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="flex items-center">
-                            <span class="text-sm font-medium text-gray-900">24</span>
-                            <span class="text-sm text-gray-500 ml-1">unid</span>
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">unid</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$15.00</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">$360</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                            Normal
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button onclick="verDetallesInventario('HERR001')" class="text-green-600 hover:text-green-900 mr-2">Ver</button>
-                        <button onclick="editarInventario('HERR001')" class="text-blue-600 hover:text-blue-900 mr-2">Editar</button>
-                        <button onclick="ajustarStock('HERR001')" class="text-yellow-600 hover:text-yellow-900">Ajustar</button>
-                    </td>
-                </tr>
-                
-                <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">EQUIP001</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="flex items-center">
-                            <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                                <i class="fas fa-tractor text-blue-600 text-sm"></i>
-                            </div>
-                            <div>
-                                <div class="text-sm font-medium text-gray-900">Tractor Agrícola</div>
-                                <div class="text-sm text-gray-500">John Deere 5075E</div>
-                            </div>
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Equipos</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="flex items-center">
-                            <span class="text-sm font-medium text-gray-900">2</span>
-                            <span class="text-sm text-gray-500 ml-1">unid</span>
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">unid</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$45,000</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">$90,000</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                            Operativo
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button onclick="verDetallesInventario('EQUIP001')" class="text-green-600 hover:text-green-900 mr-2">Ver</button>
-                        <button onclick="editarInventario('EQUIP001')" class="text-blue-600 hover:text-blue-900 mr-2">Editar</button>
-                        <button onclick="mantenimiento('EQUIP001')" class="text-purple-600 hover:text-purple-900">Mantenimiento</button>
-                    </td>
-                </tr>
-                
-                <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">INS002</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="flex items-center">
-                            <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                                <i class="fas fa-spray-can text-blue-600 text-sm"></i>
-                            </div>
-                            <div>
-                                <div class="text-sm font-medium text-gray-900">Herbicida Selectivo</div>
-                                <div class="text-sm text-gray-500">Control de malezas</div>
-                            </div>
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Insumos</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <div class="flex items-center">
-                            <span class="text-sm font-medium text-gray-900">120</span>
-                            <span class="text-sm text-gray-500 ml-1">L</span>
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">L</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$18.00</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">$2,160</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                            En Tránsito
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button onclick="verDetallesInventario('INS002')" class="text-green-600 hover:text-green-900 mr-2">Ver</button>
-                        <button onclick="editarInventario('INS002')" class="text-blue-600 hover:text-blue-900 mr-2">Editar</button>
-                        <button onclick="rastrear('INS002')" class="text-blue-600 hover:text-blue-900">Rastrear</button>
-                    </td>
-                </tr>
+                <?php endforeach; ?>
+                <?php endif; ?>
             </tbody>
         </table>
     </div>
-    
-    <div class="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-        <div class="text-sm text-gray-700">
-            Mostrando <span class="font-medium">1</span> a <span class="font-medium">5</span> de <span class="font-medium">342</span> resultados
-        </div>
-        <div class="flex gap-2">
-            <button class="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50">Anterior</button>
-            <button class="px-3 py-1 bg-green-600 text-white rounded-md text-sm">1</button>
-            <button class="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50">2</button>
-            <button class="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50">3</button>
-            <button class="px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50">Siguiente</button>
-        </div>
+
+    <!-- TAB: MOVIMIENTOS -->
+    <div id="tab-movimientos" class="overflow-x-auto hidden">
+        <table class="w-full text-left min-w-[800px]">
+            <thead>
+                <tr class="bg-gray-50 border-b border-gray-100">
+                    <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Material</th>
+                    <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Tipo</th>
+                    <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Cantidad</th>
+                    <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Motivo</th>
+                    <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Registrado por</th>
+                    <th class="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Fecha</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                <?php if (empty($movimientos)): ?>
+                <tr><td colspan="6" class="px-6 py-12 text-center text-gray-400 font-medium">
+                    <i class="fas fa-clock-rotate-left text-3xl mb-3 block opacity-30"></i>
+                    Sin movimientos registrados.
+                </td></tr>
+                <?php else: ?>
+                <?php foreach ($movimientos as $mv):
+                    $esEntrada = strtolower($mv['Tipomovimiento']) === 'entrada';
+                ?>
+                <tr class="hover:bg-gray-50/50 transition-colors">
+                    <td class="px-6 py-4 font-semibold text-gray-800"><?= htmlspecialchars($mv['MaterialNombre'] ?? 'N/A') ?></td>
+                    <td class="px-6 py-4">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold
+                            <?= $esEntrada ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700' ?>">
+                            <i class="fas <?= $esEntrada ? 'fa-arrow-down' : 'fa-arrow-up' ?> text-xs"></i>
+                            <?= htmlspecialchars($mv['Tipomovimiento']) ?>
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 font-bold <?= $esEntrada ? 'text-emerald-700' : 'text-red-600' ?>">
+                        <?= $esEntrada ? '+' : '-' ?><?= $mv['Cantidad'] ?>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600"><?= htmlspecialchars($mv['Motivo'] ?? '-') ?></td>
+                    <td class="px-6 py-4 text-sm text-gray-600"><?= htmlspecialchars($mv['UsuarioNombre'] ?? 'N/A') ?></td>
+                    <td class="px-6 py-4 text-sm text-gray-500"><?= htmlspecialchars($mv['Fecha']) ?></td>
+                </tr>
+                <?php endforeach; ?>
+                <?php endif; ?>
+            </tbody>
+        </table>
     </div>
 </div>
+</div>
 
-<!-- Modal Nuevo Item -->
-<div id="modalInventario" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden">
-        <div class="flex justify-between items-center p-6 border-b border-gray-200">
-            <h3 class="text-xl font-bold text-gray-800">Agregar Item al Inventario</h3>
-            <button onclick="closeModal('modalInventario')" class="text-gray-400 hover:text-gray-600">
+<!-- MODAL MOVIMIENTO -->
+<div id="modalMovimiento" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4 font-outfit">
+    <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden">
+        <div class="bg-gradient-to-r from-emerald-600 to-emerald-800 p-7 flex justify-between items-center text-white relative overflow-hidden">
+            <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full filter blur-xl transform translate-x-1/2 -translate-y-1/2"></div>
+            <h3 class="text-xl font-extrabold flex items-center gap-3 relative z-10">
+                <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-arrows-up-down text-lg"></i>
+                </div>
+                Registrar Movimiento
+            </h3>
+            <button onclick="closeModal('modalMovimiento')" class="relative z-10 w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors">
                 <i class="fas fa-times text-xl"></i>
             </button>
         </div>
-        <form class="p-6 space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Código *</label>
-                    <input type="text" placeholder="Ej: INS001" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Categoría *</label>
-                    <select class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500">
-                        <option value="">Seleccione...</option>
-                        <option>Insumos</option>
-                        <option>Herramientas</option>
-                        <option>Equipos</option>
-                        <option>Semillas</option>
-                    </select>
-                </div>
+        <form action="../../controllers/InventarioController.php?accion=movimiento" method="POST" class="p-7 space-y-5">
+            <div>
+                <label class="block text-sm font-bold text-gray-700 mb-2">Material <span class="text-red-500">*</span></label>
+                <select name="id_material" id="sel_material" required
+                        class="w-full px-4 py-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium bg-gray-50/50">
+                    <option value="">Seleccione material...</option>
+                    <?php foreach ($mat->obtenerTodos() as $m): ?>
+                        <option value="<?= $m['IDmateriales'] ?>"><?= htmlspecialchars($m['Nombre']) ?> (Stock: <?= $m['Cantidad'] ?> <?= $m['Unidad'] ?>)</option>
+                    <?php endforeach; ?>
+                </select>
             </div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="grid grid-cols-2 gap-5">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Nombre del Producto *</label>
-                    <input type="text" placeholder="Ej: Fertilizante NPK" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
-                    <input type="text" placeholder="Descripción breve" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500">
-                </div>
-            </div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Stock Inicial *</label>
-                    <input type="number" placeholder="Ej: 100" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Unidad *</label>
-                    <select class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500">
-                        <option value="">Seleccione...</option>
-                        <option>kg</option>
-                        <option>L</option>
-                        <option>unid</option>
-                        <option>caja</option>
-                        <option>saco</option>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Tipo <span class="text-red-500">*</span></label>
+                    <select name="tipo" required class="w-full px-4 py-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium bg-gray-50/50">
+                        <option value="Entrada">Entrada (suma stock)</option>
+                        <option value="Salida">Salida (resta stock)</option>
                     </select>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Stock Mínimo</label>
-                    <input type="number" placeholder="Ej: 20" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500">
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Cantidad <span class="text-red-500">*</span></label>
+                    <input type="number" name="cantidad" min="1" required
+                           class="w-full px-4 py-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium bg-gray-50/50">
                 </div>
             </div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Valor Unitario *</label>
-                    <input type="number" step="0.01" placeholder="Ej: 25.50" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Proveedor</label>
-                    <input type="text" placeholder="Nombre del proveedor" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500">
-                </div>
-            </div>
-            
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Ubicación</label>
-                <input type="text" placeholder="Ej: Bodega A - Estante 3" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500">
+                <label class="block text-sm font-bold text-gray-700 mb-2">Fecha <span class="text-red-500">*</span></label>
+                <input type="date" name="fecha" id="fecha_movimiento" required
+                       class="w-full px-4 py-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium bg-gray-50/50">
             </div>
-            
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Notas</label>
-                <textarea rows="3" placeholder="Observaciones adicionales..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"></textarea>
+                <label class="block text-sm font-bold text-gray-700 mb-2">Motivo</label>
+                <input type="text" name="motivo" placeholder="Ej: Compra, Uso en campo, Ajuste..."
+                       class="w-full px-4 py-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium bg-gray-50/50">
             </div>
-            
-            <div class="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button type="button" onclick="closeModal('modalInventario')" class="px-5 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">Cancelar</button>
-                <button type="submit" class="px-5 py-2 text-white bg-green-600 hover:bg-green-700 rounded-lg shadow transition-colors">Agregar Item</button>
+            <div class="flex justify-end gap-4 pt-4 border-t border-gray-100">
+                <button type="button" onclick="closeModal('modalMovimiento')"
+                    class="px-6 py-3.5 text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl font-bold transition-colors">
+                    Cancelar
+                </button>
+                <button type="submit"
+                    class="px-6 py-3.5 text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl font-bold shadow-lg shadow-emerald-500/30 transition-all hover:-translate-y-1">
+                    Guardar Movimiento
+                </button>
             </div>
         </form>
     </div>
 </div>
 
 <script>
-    function switchTabInventario(tab) {
-        // Reset all tabs
-        document.querySelectorAll('[id^="tab-"]').forEach(t => {
-            t.classList.remove('border-green-500', 'text-green-600');
-            t.classList.add('border-transparent', 'text-gray-500');
-        });
-        
-        // Activate selected tab
-        const selectedTab = document.getElementById('tab-' + tab);
-        selectedTab.classList.remove('border-transparent', 'text-gray-500');
-        selectedTab.classList.add('border-green-500', 'text-green-600');
-        
-        console.log('Switching to inventory tab:', tab);
+// Tabs
+function cambiarTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`.tab-btn[data-tab="${tab}"]`).classList.add('active');
+    document.getElementById('tab-materiales').classList.toggle('hidden', tab !== 'materiales');
+    document.getElementById('tab-movimientos').classList.toggle('hidden', tab !== 'movimientos');
+    document.getElementById('tabHidden').value = tab;
+}
+
+// Modal
+function openModal(id) {
+    document.getElementById(id).classList.remove('hidden');
+    if (id === 'modalMovimiento') {
+        document.getElementById('fecha_movimiento').value = new Date().toISOString().split('T')[0];
     }
-    
-    function verDetallesInventario(codigo) {
-        Swal.fire({
-            title: 'Detalles del Item',
-            html: `
-                <div class="text-left">
-                    <p><strong>Código:</strong> ${codigo}</p>
-                    <p><strong>Producto:</strong> Fertilizante NPK 15-15-15</p>
-                    <p><strong>Categoría:</strong> Insumos</p>
-                    <p><strong>Stock actual:</strong> 850 kg</p>
-                    <p><strong>Stock mínimo:</strong> 100 kg</p>
-                    <p><strong>Valor unitario:</strong> $2.50</p>
-                    <p><strong>Valor total:</strong> $2,125</p>
-                    <p><strong>Proveedor:</strong> AgroSuministros S.A.</p>
-                    <p><strong>Última compra:</strong> 01/04/2024</p>
-                    <p><strong>Ubicación:</strong> Bodega A - Estante 3</p>
-                </div>
-            `,
-            icon: 'info',
-            confirmButtonText: 'Cerrar'
-        });
-    }
-    
-    function editarInventario(codigo) {
-        Swal.fire({
-            title: 'Editar Item',
-            text: `¿Deseas editar el item ${codigo}?`,
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonText: 'Sí, editar',
-            cancelButtonText: 'Cancelar'
-        });
-    }
-    
-    function ajustarStock(codigo) {
-        Swal.fire({
-            title: 'Ajustar Stock',
-            html: `
-                <div class="text-left space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Item</label>
-                        <input type="text" value="${codigo}" readonly class="w-full px-4 py-2 border border-gray-200 bg-gray-50">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Stock Actual</label>
-                        <input type="text" value="850 kg" readonly class="w-full px-4 py-2 border border-gray-200 bg-gray-50">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Nuevo Stock</label>
-                        <input type="number" placeholder="Ingrese nueva cantidad" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Motivo del ajuste</label>
-                        <textarea rows="3" placeholder="Describa el motivo..." class="w-full px-4 py-2 border border-gray-300 rounded-lg"></textarea>
-                    </div>
-                </div>
-            `,
-            icon: 'info',
-            showCancelButton: true,
-            confirmButtonText: 'Ajustar',
-            cancelButtonText: 'Cancelar'
-        });
-    }
-    
-    function reordenar(codigo) {
-        Swal.fire({
-            title: 'Reordenar Item',
-            text: `¿Deseas generar una orden de compra para ${codigo}?`,
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonText: 'Sí, reordenar',
-            cancelButtonText: 'Cancelar'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                Swal.fire('Orden Generada', 'La orden de compra ha sido generada exitosamente', 'success');
-            }
-        });
-    }
-    
-    function mantenimiento(codigo) {
-        Swal.fire({
-            title: 'Programar Mantenimiento',
-            text: `¿Deseas programar mantenimiento para ${codigo}?`,
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonText: 'Programar',
-            cancelButtonText: 'Cancelar'
-        });
-    }
-    
-    function rastrear(codigo) {
-        Swal.fire({
-            title: 'Rastrear Envío',
-            html: `
-                <div class="text-left">
-                    <p><strong>Número de guía:</strong> #TRK001234</p>
-                    <p><strong>Estado:</strong> En tránsito</p>
-                    <p><strong>Fecha estimada de entrega:</strong> 20/04/2024</p>
-                    <p><strong>Transportista:</strong> Transportes Agrícolas S.A.</p>
-                    <div class="mt-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-sm">Bodega Origen</span>
-                            <span class="text-xs text-gray-500">15/04/2024</span>
-                        </div>
-                        <div class="w-full bg-gray-200 rounded-full h-2 mb-2">
-                            <div class="bg-blue-600 h-2 rounded-full" style="width: 60%"></div>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-sm">Destino</span>
-                            <span class="text-xs text-gray-500">20/04/2024</span>
-                        </div>
-                    </div>
-                </div>
-            `,
-            icon: 'info',
-            confirmButtonText: 'Cerrar'
-        });
-    }
+}
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+// Preseleccionar material desde botón de la tabla
+function registrarMovimiento(idMaterial, nombre, stock) {
+    document.getElementById('sel_material').value = idMaterial;
+    openModal('modalMovimiento');
+}
+
+// Cerrar modal al hacer clic fuera
+document.getElementById('modalMovimiento').addEventListener('click', function(e) {
+    if (e.target === this) closeModal('modalMovimiento');
+});
+
+// Restaurar tab activo si viene de filtro GET
+const urlParams = new URLSearchParams(window.location.search);
+const tabParam = urlParams.get('tab');
+if (tabParam === 'movimientos') cambiarTab('movimientos');
 </script>
 
 <?php require_once __DIR__ . '/../layouts/footer.php'; ?>

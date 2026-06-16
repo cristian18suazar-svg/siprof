@@ -1,8 +1,10 @@
 <?php
+ob_start();
 session_start();
 
 if (!isset($_SESSION['usuario'])) {
     header("Location: ../usuarios/login.php");
+    ob_end_clean();
     exit;
 }
 
@@ -155,8 +157,9 @@ $totalRegistros = count($producciones);
                     <?php endif; ?>
                 </tbody>
             </table>
-        </div>   </div>
+        </div>
     </div>
+
 </div>
 
 <!-- Modal Producción (Crear/Editar) -->
@@ -198,8 +201,18 @@ $totalRegistros = count($producciones);
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
-                    <label class="block text-sm font-bold text-gray-700 mb-2">Cantidad <span class="text-red-500">*</span></label>
-                    <input type="number" step="0.01" min="0" name="cantidad" id="cantidad_produccion" required placeholder="0.00" class="w-full px-4 py-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium bg-gray-50/50">
+                    <label class="block text-sm font-bold text-gray-700 mb-2">
+    Cantidad (Arrobas) <span class="text-red-500">*</span>
+</label>
+<input 
+    type="number" 
+    step="0.01" 
+    min="0" 
+    name="cantidad" 
+    id="cantidad_produccion" 
+    required 
+    placeholder="Ej: 25 arrobas"
+    class="w-full px-4 py-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium bg-gray-50/50">
                 </div>
                 <div>
                     <label class="block text-sm font-bold text-gray-700 mb-2">Costo (COP) <span class="text-red-500">*</span></label>

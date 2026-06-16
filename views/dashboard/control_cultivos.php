@@ -24,9 +24,9 @@ $fases     = $faseModel->obtenerTodos();
 
 // Contadores
 $total    = count($registros);
-$abiertos = count(array_filter($registros, fn($r) => $r['Estado'] === 'abierto'));
-$proceso  = count(array_filter($registros, fn($r) => $r['Estado'] === 'proceso'));
-$resueltos= count(array_filter($registros, fn($r) => $r['Estado'] === 'resuelto'));
+$abiertos = count(array_filter($registros, function($r) { return $r['Estado'] === 'abierto'; }));
+$proceso  = count(array_filter($registros, function($r) { return $r['Estado'] === 'proceso'; }));
+$resueltos= count(array_filter($registros, function($r) { return $r['Estado'] === 'resuelto'; }));
 
 // Colores y etiquetas por estado
 function estadoClase(string $estado): string {
@@ -64,21 +64,21 @@ function estadoIcono(string $estado): string {
 <div class="font-outfit space-y-8 animate-fade-in p-2 md:p-4">
 
     <!-- ── HEADER ─────────────────────────────────────────── -->
-    <div class="bg-gradient-to-r from-red-800 to-red-600 rounded-[2rem] shadow-xl p-8 md:p-10 text-white relative overflow-hidden">
+    <div class="bg-gradient-to-r from-emerald-800 to-emerald-600 rounded-[2rem] shadow-xl p-8 md:p-10 text-white relative overflow-hidden">
         <div class="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full mix-blend-overlay filter blur-3xl transform translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
         <div class="absolute bottom-0 left-0 w-80 h-80 bg-black/10 rounded-full mix-blend-overlay filter blur-3xl transform -translate-x-1/3 translate-y-1/3 pointer-events-none"></div>
         <div class="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div>
-                <p class="text-red-300 text-sm font-semibold uppercase tracking-widest mb-2">Monitoreo</p>
+                <p class="text-emerald-300 text-sm font-semibold uppercase tracking-widest mb-2">Monitoreo</p>
                 <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight mb-3">
-                    Control de <span class="text-red-300">Problemas</span>
+                    Control de <span class="text-emerald-300">Cultivos</span>
                 </h2>
-                <p class="text-red-100/80 text-lg font-light">Registro y seguimiento de incidencias en cultivos de la finca.</p>
+                <p class="text-emerald-100/80 text-lg font-light">Registro y seguimiento de incidencias en cultivos de la finca.</p>
             </div>
             <button onclick="openModal('modalControl')"
-                class="group bg-white hover:bg-red-50 text-red-900 font-bold px-8 py-4 rounded-2xl shadow-lg transition-all hover:scale-105 flex items-center gap-3 whitespace-nowrap">
-                <i class="fas fa-plus-circle text-red-600 group-hover:rotate-90 transition-transform duration-300 text-lg"></i>
-                Nuevo Problema
+                class="group bg-white hover:bg-emerald-50 text-emerald-900 font-bold px-8 py-4 rounded-2xl shadow-lg transition-all hover:scale-105 flex items-center gap-3 whitespace-nowrap">
+                <i class="fas fa-plus-circle text-emerald-600 group-hover:rotate-90 transition-transform duration-300 text-lg"></i>
+                Nuevo Registro
             </button>
         </div>
     </div>
@@ -246,13 +246,13 @@ function estadoIcono(string $estado): string {
 <div id="modalControl" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4 font-outfit">
     <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
 
-        <div class="bg-gradient-to-r from-red-600 to-red-800 p-7 flex justify-between items-center text-white relative overflow-hidden">
+        <div class="bg-gradient-to-r from-emerald-600 to-emerald-800 p-7 flex justify-between items-center text-white relative overflow-hidden">
             <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full filter blur-xl transform translate-x-1/2 -translate-y-1/2"></div>
             <h3 id="modalTitle" class="text-2xl font-extrabold flex items-center gap-3 relative z-10">
                 <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                    <i class="fas fa-bug text-xl"></i>
+                    <i class="fas fa-leaf text-xl"></i>
                 </div>
-                <span>Nuevo Problema</span>
+                <span>Nuevo Registro</span>
             </h3>
             <button onclick="closeModal('modalControl')" class="relative z-10 w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors">
                 <i class="fas fa-times text-xl"></i>
@@ -335,8 +335,8 @@ function estadoIcono(string $estado): string {
                     Cancelar
                 </button>
                 <button type="submit"
-                    class="px-6 py-3.5 text-white bg-red-600 hover:bg-red-700 rounded-xl font-bold shadow-lg shadow-red-500/30 transition-all hover:-translate-y-1">
-                    Guardar Problema
+                    class="px-6 py-3.5 text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl font-bold shadow-lg shadow-emerald-500/30 transition-all hover:-translate-y-1">
+                    Guardar Registro
                 </button>
             </div>
         </form>

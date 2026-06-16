@@ -26,7 +26,7 @@ switch ($accion) {
                 'fechasolucion' => trim($_POST['fechasolucion'] ?? ''),
                 'idcultivo'     => intval($_POST['idcultivo']   ?? 0),
                 'idfase'        => intval($_POST['idfase']      ?? 0),
-                'idusuario'     => $_SESSION['usuario']['IDusuario'] ?? 0,
+                'idusuario'     => $_SESSION['usuario']['id'] ?? $_SESSION['usuario']['IDusuario'] ?? 0,
             ];
 
             $_SESSION['alert'] = $model->crear($datos)

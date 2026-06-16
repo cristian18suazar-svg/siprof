@@ -3,6 +3,7 @@ session_start();
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../models/Lote.php';
+require_once __DIR__ . '/../models/Cultivo.php';
 
 if (!isset($_SESSION['usuario'])) {
     header("Location: ../usuarios/login.php");
@@ -83,17 +84,57 @@ switch ($accion) {
     case 'eliminar':
         $id = intval($_POST['id'] ?? 0);
         if ($id > 0) {
-            if ($loteModel->eliminar($id)) {
-                $_SESSION['alert'] = [
-                    'icon'  => 'success',
-                    'title' => 'Lote eliminado',
-                    'text'  => 'El lote ha sido eliminado exitosamente'
-                ];
-            } else {
+            try {
+                $db->beginTransaction();
+
+                // 1. Obtener cultivos del lote para eliminar sus dependencias
+                $idsCultivos = $loteModel->obtenerCultivosPorLote($id);
+                $cultivoModel = new Cultivo($db);
+                foreach ($idsCultivos as $idCultivo) {
+                    $cultivoModel->eliminarDependencias($idCultivo);
+                }
+
+                // 2. Eliminar cultivos del lote
+                if (!empty($idsCultivos)) {
+                    $placeholders = implode(',', array_fill(0, count($idsCultivos), '?'));
+                    $stmt = $db->prepare("DELETE FROM cultivo WHERE IDlote = ?");
+                    $stmt->execute([$id]);
+                }
+
+                // 3. Eliminar labores del lote (y sus dependencias en cascada)
+                $stmtLabores = $db->prepare("SELECT IDasignaciondelabor FROM asignaciondelabor WHERE IDlote = ?");
+                $stmtLabores->execute([$id]);
+                $idsLabores = $stmtLabores->fetchAll(PDO::FETCH_COLUMN);
+                foreach ($idsLabores as $idLabor) {
+                    $db->prepare("DELETE FROM confirmaciondetarea WHERE IDasignaciondelabor = ?")->execute([$idLabor]);
+                    $db->prepare("DELETE FROM aceptaciondetarea WHERE IDasignaciondelabor = ?")->execute([$idLabor]);
+                }
+                $db->prepare("DELETE FROM asignaciondelabor WHERE IDlote = ?")->execute([$id]);
+
+                // 4. Eliminar el lote
+                $ok = $loteModel->eliminar($id);
+
+                if ($ok) {
+                    $db->commit();
+                    $_SESSION['alert'] = [
+                        'icon'  => 'success',
+                        'title' => 'Lote eliminado',
+                        'text'  => 'El lote y todos sus registros asociados fueron eliminados correctamente.'
+                    ];
+                } else {
+                    $db->rollBack();
+                    $_SESSION['alert'] = [
+                        'icon'  => 'error',
+                        'title' => 'Error al eliminar',
+                        'text'  => 'No se pudo eliminar el lote.'
+                    ];
+                }
+            } catch (Exception $e) {
+                $db->rollBack();
                 $_SESSION['alert'] = [
                     'icon'  => 'error',
-                    'title' => 'Error al eliminar',
-                    'text'  => 'No se pudo eliminar el lote'
+                    'title' => 'Error del sistema',
+                    'text'  => 'Ocurrió un error inesperado al eliminar el lote.'
                 ];
             }
         }

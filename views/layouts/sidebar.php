@@ -1,46 +1,54 @@
 <?php
 $paginaActual = basename($_SERVER['PHP_SELF']);
-$rolActual = strtolower(trim($_SESSION['usuario']['rol'] ?? $_SESSION['usuario']['Niveldeacceso'] ?? ''));
-$esAdmin     = in_array($rolActual, ['administrador', 'admin']);
-$esMayordomo = $rolActual === 'mayordomo';
-$esTrabajador= $rolActual === 'trabajador';
+
+// Compatibilidad PHP 7+ — evitar operadores encadenados ?? en versiones antiguas
+$usuarioRol = '';
+if (isset($_SESSION['usuario']['rol'])) {
+    $usuarioRol = $_SESSION['usuario']['rol'];
+} elseif (isset($_SESSION['usuario']['Niveldeacceso'])) {
+    $usuarioRol = $_SESSION['usuario']['Niveldeacceso'];
+}
+$rolActual    = strtolower(trim($usuarioRol));
+$esAdmin      = in_array($rolActual, ['administrador', 'admin']);
+$esMayordomo  = ($rolActual === 'mayordomo');
+$esTrabajador = ($rolActual === 'trabajador');
 
 // Menú según rol
 if ($esAdmin) {
-    $menuPrincipal = [
-        ['href' => 'admin.php',      'icon' => 'fa-house',        'label' => 'Dashboard'],
-        ['href' => 'produccion.php', 'icon' => 'fa-chart-line',   'label' => 'Producción'],
-        ['href' => 'lotes.php',      'icon' => 'fa-map',          'label' => 'Lotes'],
-        ['href' => 'cultivos.php',   'icon' => 'fa-seedling',     'label' => 'Cultivos'],
-        ['href' => 'fases.php',      'icon' => 'fa-layer-group',  'label' => 'Fases'],
-        ['href' => 'labores.php',    'icon' => 'fa-list-check',   'label' => 'Labores'],
-        ['href' => 'pagos.php',      'icon' => 'fa-dollar-sign',  'label' => 'Pagos'],
-        ['href' => 'materiales.php', 'icon' => 'fa-boxes-stacked','label' => 'Materiales'],
-    ];
-    $menuAdmin = [
-        ['href' => 'control_cultivos.php', 'icon' => 'fa-bug',       'label' => 'Control Cultivos'],
-        ['href' => 'inventario.php',       'icon' => 'fa-warehouse',  'label' => 'Inventario'],
-        ['href' => 'reportes.php',         'icon' => 'fa-chart-bar',  'label' => 'Reportes'],
-    ];
+    $menuPrincipal = array(
+        array('href' => 'admin.php',      'icon' => 'fa-house',        'label' => 'Dashboard'),
+        array('href' => 'produccion.php', 'icon' => 'fa-chart-line',   'label' => 'Producción'),
+        array('href' => 'lotes.php',      'icon' => 'fa-map',          'label' => 'Lotes'),
+        array('href' => 'cultivos.php',   'icon' => 'fa-seedling',     'label' => 'Cultivos'),
+        array('href' => 'fases.php',      'icon' => 'fa-layer-group',  'label' => 'Fases'),
+        array('href' => 'labores.php',    'icon' => 'fa-list-check',   'label' => 'Labores'),
+        array('href' => 'pagos.php',      'icon' => 'fa-dollar-sign',  'label' => 'Pagos'),
+        array('href' => 'materiales.php', 'icon' => 'fa-boxes-stacked','label' => 'Materiales'),
+    );
+    $menuAdmin = array(
+        array('href' => 'control_cultivos.php', 'icon' => 'fa-bug',      'label' => 'Control Cultivos'),
+        array('href' => 'inventario.php',       'icon' => 'fa-warehouse', 'label' => 'Inventario'),
+        array('href' => 'reportes.php',         'icon' => 'fa-chart-bar', 'label' => 'Reportes'),
+    );
 } elseif ($esMayordomo) {
-    $menuPrincipal = [
-        ['href' => 'mayordomo.php',  'icon' => 'fa-house',        'label' => 'Dashboard'],
-        ['href' => 'labores.php',    'icon' => 'fa-list-check',   'label' => 'Labores'],
-        ['href' => 'produccion.php', 'icon' => 'fa-chart-line',   'label' => 'Producción'],
-        ['href' => 'lotes.php',      'icon' => 'fa-map',          'label' => 'Lotes'],
-        ['href' => 'cultivos.php',   'icon' => 'fa-seedling',     'label' => 'Cultivos'],
-        ['href' => 'materiales.php', 'icon' => 'fa-boxes-stacked','label' => 'Materiales'],
-        ['href' => 'pagos.php',      'icon' => 'fa-dollar-sign',  'label' => 'Pagos'],
-    ];
-    $menuAdmin = [];
+    $menuPrincipal = array(
+        array('href' => 'mayordomo.php',  'icon' => 'fa-house',        'label' => 'Dashboard'),
+        array('href' => 'labores.php',    'icon' => 'fa-list-check',   'label' => 'Labores'),
+        array('href' => 'produccion.php', 'icon' => 'fa-chart-line',   'label' => 'Producción'),
+        array('href' => 'lotes.php',      'icon' => 'fa-map',          'label' => 'Lotes'),
+        array('href' => 'cultivos.php',   'icon' => 'fa-seedling',     'label' => 'Cultivos'),
+        array('href' => 'materiales.php', 'icon' => 'fa-boxes-stacked','label' => 'Materiales'),
+        array('href' => 'pagos.php',      'icon' => 'fa-dollar-sign',  'label' => 'Pagos'),
+    );
+    $menuAdmin = array();
 } elseif ($esTrabajador) {
-    $menuPrincipal = [
-        ['href' => 'trabajador.php', 'icon' => 'fa-house',       'label' => 'Mi Panel'],
-    ];
-    $menuAdmin = [];
+    $menuPrincipal = array(
+        array('href' => 'trabajador.php', 'icon' => 'fa-house', 'label' => 'Mi Panel'),
+    );
+    $menuAdmin = array();
 } else {
-    $menuPrincipal = [['href' => 'admin.php', 'icon' => 'fa-house', 'label' => 'Dashboard']];
-    $menuAdmin = [];
+    $menuPrincipal = array(array('href' => 'admin.php', 'icon' => 'fa-house', 'label' => 'Dashboard'));
+    $menuAdmin = array();
 }
 ?>
 
@@ -218,18 +226,32 @@ if ($esAdmin) {
         <div class="bg-white/[0.07] border border-white/10 rounded-2xl px-4 py-3 flex items-center gap-3 backdrop-blur-sm mb-2">
             <div class="relative flex-shrink-0">
                 <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-green-300 to-green-600 flex items-center justify-center shadow-md text-white font-bold text-base">
-                    <?= strtoupper(substr($_SESSION['usuario']['nombre'] ?? 'U', 0, 1)) ?>
+                    <?php
+                    $nombreUsuario = isset($_SESSION['usuario']['nombre']) ? $_SESSION['usuario']['nombre'] : 'U';
+                    echo strtoupper(substr($nombreUsuario, 0, 1));
+                    ?>
                 </div>
                 <span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 border-2 border-green-900 rounded-full"></span>
             </div>
             <div class="min-w-0 flex-1">
                 <p class="text-white text-sm font-semibold truncate leading-tight">
-                    <?= htmlspecialchars($_SESSION['usuario']['nombre'] ?? 'Usuario') ?>
+                    <?php echo htmlspecialchars(isset($_SESSION['usuario']['nombre']) ? $_SESSION['usuario']['nombre'] : 'Usuario'); ?>
                 </p>
-                <span class="inline-flex items-center gap-1 mt-0.5 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full
-                    <?= $esAdmin ? 'bg-amber-400/20 text-amber-300' : 'bg-emerald-400/20 text-emerald-300' ?>">
-                    <span class="w-1.5 h-1.5 rounded-full <?= $esAdmin ? 'bg-amber-400' : 'bg-emerald-400' ?>"></span>
-                    <?= htmlspecialchars($_SESSION['usuario']['rol'] ?? $_SESSION['usuario']['Niveldeacceso'] ?? 'Trabajador') ?>
+                <?php
+                $rolDisplay = '';
+                if (isset($_SESSION['usuario']['rol'])) {
+                    $rolDisplay = $_SESSION['usuario']['rol'];
+                } elseif (isset($_SESSION['usuario']['Niveldeacceso'])) {
+                    $rolDisplay = $_SESSION['usuario']['Niveldeacceso'];
+                } else {
+                    $rolDisplay = 'Trabajador';
+                }
+                $badgeClass = $esAdmin ? 'bg-amber-400/20 text-amber-300' : 'bg-emerald-400/20 text-emerald-300';
+                $dotClass   = $esAdmin ? 'bg-amber-400' : 'bg-emerald-400';
+                ?>
+                <span class="inline-flex items-center gap-1 mt-0.5 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full <?php echo $badgeClass; ?>">
+                    <span class="w-1.5 h-1.5 rounded-full <?php echo $dotClass; ?>"></span>
+                    <?php echo htmlspecialchars($rolDisplay); ?>
                 </span>
             </div>
         </div>

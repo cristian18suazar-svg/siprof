@@ -131,14 +131,28 @@ $cultivosActivos = count(array_filter($cultivos, function($c) { return $c['Estad
                                 </td>
                                 <td class="p-6">
                                     <div class="flex flex-col gap-1">
-                                        <span class="font-bold text-gray-800"><i class="fas fa-map-marker-alt text-gray-400 mr-2"></i> Lote ID: <?php echo $c['IDlote']; ?></span>
-                                        <span class="text-gray-500 font-medium text-sm"><i class="fas fa-layer-group text-gray-400 mr-2"></i> Fase ID: <?php echo $c['IDfase']; ?></span>
+                                        <span class="font-bold text-gray-800"><i class="fas fa-map-marker-alt text-gray-400 mr-2"></i><?php echo htmlspecialchars($c['LoteNombre'] ?? 'Lote ID: '.$c['IDlote']); ?></span>
+                                        <span class="text-gray-500 font-medium text-sm"><i class="fas fa-layer-group text-gray-400 mr-2"></i><?php echo htmlspecialchars($c['FaseNombre'] ?? 'Fase ID: '.$c['IDfase']); ?></span>
                                     </div>
-                                </td>
-                                <td class="p-6">
-                                    <div class="flex flex-col gap-1">
-                                        <span class="text-gray-700 font-medium text-sm"><i class="fas fa-calendar-plus text-gray-400 mr-2"></i> Inicio: <?php echo $c['FechaInicio']; ?></span>
-                                        <span class="text-gray-500 font-medium text-sm"><i class="fas fa-calendar-check text-gray-400 mr-2"></i> Cosecha: <?php echo $c['FechaCosecha'] ?? 'N/A'; ?></span>
+                               <td class="p-6">
+    <div class="flex flex-col gap-1">
+
+                        <!-- Fecha Inicio -->
+                        <span class="text-gray-700 font-medium text-sm">
+                            <i class="fas fa-calendar-plus text-gray-400 mr-2"></i>
+                            Inicio:
+                            <?php echo !empty($c['Fechainicio']) ? date('d/m/Y', strtotime($c['Fechainicio'])) : '<span class="text-gray-400 italic">Sin fecha</span>'; ?>
+                        </span>
+
+                        <!-- Fecha Cosecha -->
+                        <span class="text-gray-500 font-medium text-sm">
+                            <i class="fas fa-calendar-check text-gray-400 mr-2"></i>
+                            Cosecha:
+                            <?php echo !empty($c['Fechacosecha']) ? date('d/m/Y', strtotime($c['Fechacosecha'])) : '<span class="text-gray-400 italic">Sin fecha</span>'; ?>
+                        </span>
+
+    </div>
+</td>
                                     </div>
                                 </td>
                                 <td class="p-6">
@@ -264,23 +278,27 @@ function openModal(id) {
         document.getElementById('formCultivo').action = '../../controllers/CultivoController.php?accion=crear';
         document.getElementById('formCultivo').reset();
         document.getElementById('containerEstadoCultivo').classList.add('hidden');
+        // Fecha de inicio automática
+        document.getElementById('fecha_inicio').value = new Date().toISOString().split('T')[0];
     }
 }
 
 function closeModal(id) {
     document.getElementById(id).classList.add('hidden');
+    document.getElementById('id_cultivo').value = '';
 }
 
 function editarCultivo(cultivo) {
     document.getElementById('modalTitleCultivo').querySelector('span').innerText = 'Editar Cultivo';
     document.getElementById('formCultivo').action = '../../controllers/CultivoController.php?accion=editar';
-    document.getElementById('id_cultivo').value = cultivo.IDcultivo;
-    document.getElementById('nombre_cultivo').value = cultivo.Nombre;
-    document.getElementById('id_lote').value = cultivo.IDlote;
-    document.getElementById('id_fase').value = cultivo.IDfase;
-    document.getElementById('fecha_inicio').value = cultivo.FechaInicio;
-    document.getElementById('fecha_cosecha').value = cultivo.FechaCosecha;
-    document.getElementById('estado_cultivo').value = cultivo.Estado;
+    document.getElementById('id_cultivo').value      = cultivo.IDcultivo;
+    document.getElementById('nombre_cultivo').value  = cultivo.Nombre;
+    document.getElementById('id_lote').value         = cultivo.IDlote;
+    document.getElementById('id_fase').value         = cultivo.IDfase;
+    // Nombres correctos según la BD: Fechainicio y Fechacosecha
+    document.getElementById('fecha_inicio').value    = cultivo.Fechainicio   ?? '';
+    document.getElementById('fecha_cosecha').value   = cultivo.Fechacosecha  ?? '';
+    document.getElementById('estado_cultivo').value  = cultivo.Estado;
     document.getElementById('containerEstadoCultivo').classList.remove('hidden');
     openModal('modalCultivo');
 }
