@@ -12,7 +12,7 @@ $titulo = "Gestión de Producción - SIPROF";
 require_once __DIR__ . '/../layouts/header.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../models/Produccion.php';
-require_once __DIR__ . '/../../models/Cultivo.php';
+require_once __DIR__ . '/../../models/Cultivos.php';
 
 $db = getConnection();
 $produccionModel = new Produccion($db);
@@ -115,7 +115,7 @@ $totalRegistros = count($producciones);
                             </td>
                         </tr>
                     <?php else: ?>
-                        <?php foreach ($producciones as $p): ?>
+                        <?php foreach ($producciones as $producto): ?>
                             <tr class="hover:bg-gray-50/50 transition-colors duration-200">
                                 <td class="p-6">
                                     <div class="flex items-center gap-3">

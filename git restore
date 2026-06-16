@@ -1,0 +1,20 @@
+warning: in the working copy of 'config/database.php', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/config/database.php b/config/database.php[m
+[1mindex 8a82cd2..1e1c92c 100644[m
+[1m--- a/config/database.php[m
+[1m+++ b/config/database.php[m
+[36m@@ -13,13 +13,7 @@[m [m$esLocal = ($serverName === 'localhost'[m
+         || strpos($httpHost, 'localhost') !== false[m
+         || strpos($httpHost, '127.0.0.1') !== false);[m
+ [m
+[31m-if ($esLocal) {[m
+[31m-    // ── ENTORNO LOCAL (Laragon) ──────────────────────────[m
+[31m-    define('DB_HOST', '127.0.0.1');[m
+[31m-    define('DB_PORT', '3320');[m
+[31m-    define('DB_NAME', 'siprof');[m
+[31m-    define('DB_USER', 'root');[m
+[31m-    define('DB_PASS', '');[m
+[32m+[m
+ } else {[m
+     // ── ENTORNO PRODUCCIÓN (byethost) ────────────────────[m
+     // Reemplaza con los datos de tu panel de byethost[m
